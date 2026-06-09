@@ -48,8 +48,70 @@ function writeAll(list) {
 // ── Defaults ──
 export const DEFAULT_THEME = "modern";
 
+// Per-section header styling + layout. `accent`/`bg` null means "inherit from
+// the theme" (accent colour) / "transparent". Kept small but expressive enough
+// to cover the spec's font/colour/background/border/alignment header controls.
+export function defaultHeader() {
+  return { align: "left", uppercase: true, divider: true, accent: null, bg: null };
+}
+
+export function blankSection(name = "New Section") {
+  return { id: uid("sec"), name, subhead: "", icon: "", columns: 1, bg: null, header: defaultHeader(), items: [] };
+}
+
+// Backfill layout/header fields on a section loaded from an older stored menu so
+// the builder and preview can rely on them existing.
+export function normalizeSection(sec) {
+  return {
+    ...sec,
+    subhead: sec.subhead ?? "",
+    icon: sec.icon ?? "",
+    columns: Math.min(6, Math.max(1, sec.columns ?? 1)),
+    bg: sec.bg ?? null,
+    header: { ...defaultHeader(), ...(sec.header ?? {}) },
+    items: (sec.items ?? []).map(it => ({ featured: false, ...it })),
+  };
+}
+
 export function blankItem() {
-  return { id: uid("item"), name: "", description: "", price: 0, image: null, available: true, tags: [], reviews: [] };
+  return { id: uid("item"), name: "", description: "", price: 0, image: null, available: true, featured: false, tags: [], reviews: [] };
+}
+
+// ── Element-level design system ──
+// A menu carries a `design` override layer on top of its template (theme). Every
+// `color`/`bg`/`bgGradient`/`text` left null inherits the template, so switching
+// templates restyles everything the user hasn't explicitly overridden while
+// preserving their edits. Font ids resolve via `fontCss()` ("theme" = inherit).
+function role(size, bold) {
+  return { font: "theme", size, color: null, bold, italic: false };
+}
+
+export function defaultDesign() {
+  return {
+    page: { bg: null, bgGradient: "none", text: null },
+    type: {
+      title: role(30, true),
+      sectionHeader: role(18, true),
+      itemName: role(15, true),
+      itemDesc: role(13, false),
+      price: role(15, true),
+    },
+    spacing: { itemGap: 12, sectionGap: 30, padding: 32 },
+  };
+}
+
+// Deep-merge a stored (possibly partial / legacy-absent) design over the
+// defaults so the resolver can read concrete values everywhere.
+export function normalizeDesign(design) {
+  const d = defaultDesign();
+  if (!design) return d;
+  const type = {};
+  for (const k of Object.keys(d.type)) type[k] = { ...d.type[k], ...(design.type?.[k] ?? {}) };
+  return {
+    page: { ...d.page, ...(design.page ?? {}) },
+    type,
+    spacing: { ...d.spacing, ...(design.spacing ?? {}) },
+  };
 }
 
 export function blankMenu(name = "Main Menu") {
@@ -57,7 +119,8 @@ export function blankMenu(name = "Main Menu") {
     id: uid("menu"),
     name,
     themeId: DEFAULT_THEME,
-    sections: [{ id: uid("sec"), name: "Starters", items: [] }],
+    design: defaultDesign(),
+    sections: [{ ...blankSection("Starters") }],
     views: 0,
     updatedAt: Date.now(),
   };
@@ -216,9 +279,17 @@ export function seedIfEmpty() {
   // Seeded popularity (menu item view counts) drives the analytics panel.
   const itemViews = { 5: 1240, 6: 980, 2: 760, 11: 540, 4: 430 };
 
-  const sections = MENU.map(cat => ({
+  const sectionIcons = ["🥗", "🍛", "🫓", "🥤", "🍮"];
+  const sections = MENU.map((cat, ci) => ({
     id: uid("sec"),
     name: cat.name,
+    icon: sectionIcons[ci] ?? "",
+    subhead: ci === 1 ? "Slow-cooked, served with fresh naan" : "",
+    bg: null,
+    // Showcase the layout system in the demo: a couple of compact 2-column
+    // sections among the classic single-column ones.
+    columns: ci === 0 || ci === 3 ? 2 : 1,
+    header: defaultHeader(),
     items: cat.items.map(it => ({
       id: uid("item"),
       name: it.name,
@@ -226,6 +297,8 @@ export function seedIfEmpty() {
       price: it.price,
       image: it.image,
       available: it.available,
+      // Spotlight the signature dish to demo the "featured" highlight.
+      featured: it.id === 5,
       tags: [
         ...(it.vegetarian ? ["veg"] : []),
         ...(it.spicy ? ["spicy"] : []),
@@ -270,7 +343,7 @@ export function seedIfEmpty() {
       : null,
     reviews,
     menus: [
-      { id: uid("menu"), name: "Main Menu", themeId: "modern", sections, views: 3420, updatedAt: Date.now() },
+      { id: uid("menu"), name: "Main Menu", themeId: "modern", design: defaultDesign(), sections, views: 3420, updatedAt: Date.now() },
     ],
   };
 

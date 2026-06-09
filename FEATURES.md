@@ -120,19 +120,54 @@ is empty). Used in the restaurant **Info tab** and the **Location Picker** previ
 
 ---
 
-## Menu Builder (3 steps)
+## Menu Builder (4 steps)
 
 A full-screen authoring tool with a segmented step control:
 
 1. **Restaurant** — name, **Country → City → Area** cascade, cuisines, phone,
-   description, cover image, and a 4-theme designer picker
-   (Modern / Luxury / Minimal / Vintage).
+   description, cover image (file upload → data URL).
 2. **Bank Discount** — enable toggle, bank, card type, percent, min spend,
    valid days, expiry — with a **live discount-badge preview**.
-3. **Menu Items** — category sidebar (add categories) + item cards. The item
-   editor supports add / edit / delete, **multi-select tags** (Vegetarian,
-   Spicy, Halal, Bestseller…), price, photo, and availability — all wired to
-   real state.
+3. **Menu Items** — section sidebar with **drag-and-drop reordering** + item
+   cards (also drag-to-reorder). Per-section **layout & header**: **1–6 columns**,
+   header alignment, uppercase, divider rule, accent colour, **emoji icon**,
+   **sub-header/description**, and **section background**. The item editor
+   supports add / edit / delete, **multi-select tags**, price, photo,
+   availability, and a **Featured highlight** (accent border + tint + badge).
+4. **Design** — full element-level customisation (see below) + a live preview rail.
+
+### Full customisation (the `design` model)
+
+Templates are **editable starting points, not fixed looks**. Each menu stores a
+`design` override layer (`store.js` → `defaultDesign()` / `normalizeDesign()`)
+on top of its template (theme). `resolveDesign(menu)` merges them into concrete
+styles consumed by **both** the live preview and the PDF export. Anything left
+`null` inherits the template, so **switching templates restyles everything you
+haven't explicitly overridden** while preserving your edits.
+
+- **Typography** — per text role (restaurant name, section headers, item names,
+  descriptions, prices): font family (`FONT_FAMILIES`), size, colour, bold, italic.
+- **Colours & background** — page text colour, page background colour, and
+  **gradient presets** (`GRADIENT_PRESETS`).
+- **Spacing** — item gap, section gap, page padding (sliders).
+
+**Preview / export / share** (top bar + dashboard menu cards):
+- **Preview** — live themed render honouring the full design model, with a
+  **Desktop / Mobile / Print** view toggle (Mobile forces single-column to match
+  the ≤560px public collapse; Print opens the export).
+- **Export** — a self-contained printable HTML page (Print → Save as PDF) that
+  mirrors typography, colours, backgrounds, columns, photos, tags, and spacing.
+- **Share** — a `ShareModal` with a **scannable QR code** and a **shareable
+  link**. The full menu snapshot (incl. `design`) is encoded into the URL hash
+  (`#menu=…`), so the link works on **any device with no backend**. Opening such
+  a link renders a full-screen read-only **public menu view** (`PublicMenuScreen`).
+  Very large menus make a dense QR — the copyable link always works.
+
+> Per-menu `design` and per-section `columns`/`header`/`subhead`/`icon`/`bg`
+> + per-item `featured` live on stored menus; `normalizeDesign()`/
+> `normalizeSection()` in `store.js` backfill them so older saved menus keep
+> rendering. The QR image is fetched from `api.qrserver.com` (only the share
+> URL is sent).
 
 ---
 

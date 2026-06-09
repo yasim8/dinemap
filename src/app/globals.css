@@ -415,6 +415,10 @@ body {
 .dm-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .dm-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 
+/* Menu-preview column layout (1–4 cols, set via --cols); collapses on phones */
+.dm-preview-grid { display: grid; gap: 14px; grid-template-columns: repeat(var(--cols, 1), 1fr); }
+@media (max-width: 560px) { .dm-preview-grid { grid-template-columns: 1fr; } }
+
 /* Theme swatch (menu designer) */
 .dm-swatch { display: flex; gap: 4px; }
 .dm-swatch span { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.08); }

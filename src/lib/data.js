@@ -152,10 +152,43 @@ export const ITEM_TAGS = [
 // Themes for the menu designer
 export const MENU_THEMES = [
   { id: "modern", name: "Modern", colors: { bg: "#FFFFFF", accent: "#FF6B2B", text: "#0A0F1E" }, font: "Sans" },
+  { id: "minimal", name: "Minimalist", colors: { bg: "#FAFAF7", accent: "#1C3E7D", text: "#1A1A1A" }, font: "Sans" },
+  { id: "elegant", name: "Elegant", colors: { bg: "#FBF8F3", accent: "#B08D57", text: "#2B2620" }, font: "Serif" },
+  { id: "rustic", name: "Rustic", colors: { bg: "#EFE7D6", accent: "#9C4722", text: "#3B2F23" }, font: "Serif" },
   { id: "luxury", name: "Luxury", colors: { bg: "#0A0F1E", accent: "#C8A24B", text: "#FFFFFF" }, font: "Serif" },
-  { id: "minimal", name: "Minimal", colors: { bg: "#FAFAF7", accent: "#1C3E7D", text: "#1A1A1A" }, font: "Sans" },
   { id: "vintage", name: "Vintage", colors: { bg: "#F3E9D8", accent: "#8B4513", text: "#3A2A1A" }, font: "Serif" },
 ];
+
+// Font families for the typography designer. `css: null` means "inherit the
+// template's base font", so switching templates restyles un-overridden text.
+export const FONT_FAMILIES = [
+  { id: "theme", label: "Template default", css: null },
+  { id: "sans", label: "Sans", css: "var(--font-body)" },
+  { id: "serif", label: "Serif", css: "Georgia, 'Times New Roman', serif" },
+  { id: "display", label: "Display", css: "var(--font-display)" },
+  { id: "slab", label: "Slab", css: "'Rockwell', 'Roboto Slab', Georgia, serif" },
+  { id: "script", label: "Script", css: "'Segoe Script', 'Brush Script MT', cursive" },
+  { id: "mono", label: "Mono", css: "'SFMono-Regular', 'Courier New', monospace" },
+];
+
+export function fontCss(id) {
+  return FONT_FAMILIES.find(f => f.id === id)?.css ?? null;
+}
+
+// Background gradient presets for the menu/section background. `css: null` =
+// no gradient (use the solid background colour / template background instead).
+export const GRADIENT_PRESETS = [
+  { id: "none", label: "None", css: null },
+  { id: "sunset", label: "Sunset", css: "linear-gradient(135deg, #FF6B2B 0%, #C8243B 100%)" },
+  { id: "gold", label: "Gold", css: "linear-gradient(135deg, #C8A24B 0%, #8B6B1F 100%)" },
+  { id: "ink", label: "Ink", css: "linear-gradient(160deg, #0A0F1E 0%, #1C3E7D 100%)" },
+  { id: "cream", label: "Cream", css: "linear-gradient(160deg, #FBF8F3 0%, #EFE2C9 100%)" },
+  { id: "forest", label: "Forest", css: "linear-gradient(135deg, #234D3A 0%, #0E2A1E 100%)" },
+];
+
+export function gradientCss(id) {
+  return GRADIENT_PRESETS.find(g => g.id === id)?.css ?? null;
+}
 
 // Card-type options for discount setup
 export const CARD_TYPES = [

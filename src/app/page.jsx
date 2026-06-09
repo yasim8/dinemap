@@ -5,9 +5,10 @@ import { useAuthed, setAuthed } from "@/lib/auth";
 import {
   useOwnerData, seedIfEmpty, getRestaurant, upsertRestaurant, saveMenu,
   createRestaurant, addMenu, deleteMenu, duplicateMenu,
-  replyToReview, replyToItemReview,
+  replyToReview, replyToItemReview, blankSection, normalizeSection, defaultHeader,
+  defaultDesign, normalizeDesign,
 } from "@/lib/store";
-import { CATEGORIES, BANKS, RESTAURANTS, MENU, REVIEWS, RATING_DISTRIBUTION, COUNTRIES, ITEM_TAGS, MENU_THEMES, CARD_TYPES, locationForArea, nearestArea } from "@/lib/data";
+import { CATEGORIES, BANKS, RESTAURANTS, MENU, REVIEWS, RATING_DISTRIBUTION, COUNTRIES, ITEM_TAGS, MENU_THEMES, CARD_TYPES, FONT_FAMILIES, GRADIENT_PRESETS, fontCss, gradientCss, locationForArea, nearestArea } from "@/lib/data";
 import { RestaurantCard } from "@/components/restaurant/RestaurantCard";
 import {
   Logo, Rating, PriceRange, Tag, Badge, Avatar, IconBtn, Btn, Pill,
@@ -15,7 +16,8 @@ import {
   Search, MapPin, Heart, Star, ChevronDown, ChevronLeft, ChevronRight,
   ArrowRight, Share2, X, Plus, Percent, Phone, Clock, Bookmark,
   Flame, CreditCard, User, Eye, Pencil, Trash2, Camera, GripVertical, Check,
-  LayoutGrid, BarChart3, MessageSquare, Download, Copy, TrendingUp, Reply, Store
+  LayoutGrid, BarChart3, MessageSquare, Download, Copy, TrendingUp, Reply, Store,
+  ExternalLink, Palette
 } from "@/components/ui";
 
 // Wrap the browser geolocation API in a promise
@@ -623,35 +625,116 @@ function themeOf(themeId) {
   return MENU_THEMES.find(t => t.id === themeId) ?? MENU_THEMES[0];
 }
 
-// Read-only render of a restaurant + a single menu in the chosen theme.
-// Used by the in-app Preview modal (and mirrored by the print/PDF export below).
-function MenuPreview({ restaurant, menu }) {
+// Resolve a menu's template (theme) + design overrides into concrete values the
+// preview and the export both consume. Anything left null in `design` falls back
+// to the template, so switching templates restyles un-overridden elements.
+function resolveDesign(menu) {
   const t = themeOf(menu.themeId);
+  const d = normalizeDesign(menu.design);
   const serif = t.font === "Serif";
-  return (
-    <div style={{ background: t.colors.bg, color: t.colors.text, borderRadius: "var(--radius-lg)", overflow: "hidden", fontFamily: serif ? "Georgia, 'Times New Roman', serif" : "var(--font-body)" }}>
-      <div style={{ height: 140, backgroundImage: `url(${restaurant.coverImage})`, backgroundSize: "cover", backgroundPosition: "center" }} />
-      <div style={{ padding: "28px 32px 36px" }}>
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: serif ? 0 : "-0.5px", color: t.colors.text }}>{restaurant.name || "Your Restaurant"}</div>
-          {restaurant.cuisine && <div style={{ fontSize: 14, opacity: 0.7, marginTop: 4 }}>{restaurant.cuisine}</div>}
-          <div style={{ width: 60, height: 3, background: t.colors.accent, margin: "16px auto 0", borderRadius: 2 }} />
+  const baseFont = serif ? "Georgia, 'Times New Roman', serif" : "var(--font-body)";
+  const text = d.page.text || t.colors.text;
+  // Default colour per text role (used when the role's own colour is null).
+  const roleColor = { title: text, sectionHeader: t.colors.accent, itemName: text, itemDesc: text, price: t.colors.accent };
+  const styleFor = (key) => {
+    const r = d.type[key];
+    return {
+      fontFamily: fontCss(r.font) || baseFont,
+      fontSize: r.size,
+      color: r.color || roleColor[key],
+      fontWeight: r.bold ? 700 : 400,
+      fontStyle: r.italic ? "italic" : "normal",
+    };
+  };
+  return {
+    t, text, accent: t.colors.accent,
+    pageBg: gradientCss(d.page.bgGradient) || d.page.bg || t.colors.bg,
+    spacing: d.spacing,
+    title: styleFor("title"),
+    sectionHeader: styleFor("sectionHeader"),
+    itemName: styleFor("itemName"),
+    itemDesc: styleFor("itemDesc"),
+    price: styleFor("price"),
+  };
+}
+
+// One menu item rendered for the read-only preview / public view. When a
+// section is laid out in multiple columns the photo sits on top (card style);
+// in a single column it reads as a classic name-leader-price row. `featured`
+// items get an accent border + tint to spotlight them.
+function PreviewItem({ it, rd, multi }) {
+  const tags = (it.tags ?? []).map(id => ITEM_TAGS.find(x => x.id === id)?.label ?? id);
+  const meta = (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+        <div style={rd.itemName}>{it.name}{!it.available && <span style={{ fontSize: 11, opacity: 0.6 }}> · unavailable</span>}</div>
+        <span style={{ ...rd.price, whiteSpace: "nowrap" }}>{rupee(it.price)}</span>
+      </div>
+      {it.description && <div style={{ ...rd.itemDesc, opacity: 0.78, marginTop: 3 }}>{it.description}</div>}
+      {tags.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+          {tags.map(label => <span key={label} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: `${rd.accent}1A`, color: rd.accent }}>{label}</span>)}
         </div>
-        {menu.sections.map(sec => (
-          <div key={sec.id} style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.colors.accent, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 14 }}>{sec.name}</div>
-            {sec.items.length === 0 && <div style={{ fontSize: 13, opacity: 0.5 }}>No items yet.</div>}
-            {sec.items.map(it => (
-              <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "10px 0", borderBottom: `1px solid ${t.colors.accent}22`, opacity: it.available ? 1 : 0.45 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{it.name}{!it.available && <span style={{ fontSize: 11, opacity: 0.6 }}> · unavailable</span>}</div>
-                  {it.description && <div style={{ fontSize: 13, opacity: 0.7, marginTop: 3 }}>{it.description}</div>}
-                </div>
-                <div style={{ fontWeight: 700, color: t.colors.accent, whiteSpace: "nowrap" }}>{rupee(it.price)}</div>
+      )}
+    </>
+  );
+  const feat = it.featured
+    ? { border: `2px solid ${rd.accent}`, background: `${rd.accent}0F` }
+    : { border: `1px solid ${rd.accent}22` };
+  if (multi) {
+    return (
+      <div style={{ borderRadius: 12, overflow: "hidden", opacity: it.available ? 1 : 0.45, ...feat }}>
+        {it.image && <div style={{ aspectRatio: "4/3", backgroundImage: `url(${it.image})`, backgroundSize: "cover", backgroundPosition: "center" }} />}
+        <div style={{ padding: "12px 14px" }}>{meta}</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", gap: 14, padding: it.featured ? "12px 14px" : "12px 0", borderRadius: it.featured ? 12 : 0, opacity: it.available ? 1 : 0.45, ...(it.featured ? feat : { borderBottom: `1px solid ${rd.accent}22` }) }}>
+      {it.image && <div style={{ width: 64, height: 64, flexShrink: 0, borderRadius: 10, backgroundImage: `url(${it.image})`, backgroundSize: "cover", backgroundPosition: "center" }} />}
+      <div style={{ flex: 1 }}>{meta}</div>
+    </div>
+  );
+}
+
+// Read-only render of a restaurant + a single menu. Honours the full design
+// system: template, typography overrides, page/section backgrounds, per-section
+// columns + header styling + sub-header/icon, item highlights, and spacing.
+// Used by the in-app Preview modal, the public share view, and mirrored by the
+// print/PDF export below.
+function MenuPreview({ restaurant, menu, device }) {
+  const rd = resolveDesign(menu);
+  // Mobile preview forces single column, matching the public view's ≤560px
+  // collapse (viewport media queries can't see a narrow modal in a wide window).
+  const mobile = device === "mobile";
+  return (
+    <div style={{ background: rd.pageBg, color: rd.text, borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
+      <div style={{ height: 140, backgroundImage: `url(${restaurant.coverImage})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+      <div style={{ padding: `${rd.spacing.padding - 4}px ${rd.spacing.padding}px ${rd.spacing.padding + 4}px` }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={rd.title}>{restaurant.name || "Your Restaurant"}</div>
+          {restaurant.cuisine && <div style={{ fontSize: 14, opacity: 0.7, marginTop: 4 }}>{restaurant.cuisine}</div>}
+          <div style={{ width: 60, height: 3, background: rd.accent, margin: "16px auto 0", borderRadius: 2 }} />
+        </div>
+        {menu.sections.map(raw => {
+          const sec = normalizeSection(raw);
+          const h = sec.header;
+          const accent = h.accent || rd.sectionHeader.color;
+          const cols = mobile ? 1 : sec.columns;
+          const multi = cols > 1;
+          return (
+            <div key={sec.id} style={{ marginBottom: rd.spacing.sectionGap, ...(sec.bg ? { background: sec.bg, padding: 16, borderRadius: 12 } : {}) }}>
+              <div style={{ marginBottom: 14, textAlign: h.align, ...(h.bg ? { background: h.bg, padding: "8px 12px", borderRadius: 8 } : {}), ...(h.divider ? { borderBottom: `2px solid ${accent}`, paddingBottom: 8 } : {}) }}>
+                <span style={{ ...rd.sectionHeader, color: accent, textTransform: h.uppercase ? "uppercase" : "none", letterSpacing: h.uppercase ? "1px" : 0 }}>{sec.icon ? `${sec.icon} ` : ""}{sec.name}</span>
+                {sec.subhead && <div style={{ fontSize: 13, opacity: 0.7, marginTop: 4, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>{sec.subhead}</div>}
               </div>
-            ))}
-          </div>
-        ))}
+              {sec.items.length === 0 && <div style={{ fontSize: 13, opacity: 0.5 }}>No items yet.</div>}
+              <div className={multi ? "dm-preview-grid" : ""} style={multi ? { "--cols": cols, gap: rd.spacing.itemGap } : {}}>
+                {sec.items.map(it => <PreviewItem key={it.id} it={it} rd={rd} multi={multi} />)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -661,36 +744,75 @@ function MenuPreview({ restaurant, menu }) {
 // PDF" — opens a print window the user can save as PDF — and as a shareable
 // digital page).
 function buildPrintableHtml(restaurant, menu) {
-  const t = themeOf(menu.themeId);
-  const serif = t.font === "Serif";
-  const esc = (s) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const sections = menu.sections.map(sec => `
-    <section>
-      <h2>${esc(sec.name)}</h2>
-      ${sec.items.map(it => `
-        <div class="row${it.available ? "" : " off"}">
-          <div><div class="name">${esc(it.name)}${it.available ? "" : " · unavailable"}</div>${it.description ? `<div class="desc">${esc(it.description)}</div>` : ""}</div>
-          <div class="price">₨${it.price.toLocaleString("en-PK")}</div>
-        </div>`).join("")}
-    </section>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(restaurant.name)} — ${esc(menu.name)}</title>
+  const rd = resolveDesign(menu);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Serialise a resolved role style object into a CSS declaration string. CSS
+  // vars (var(--font-body)/--font-display) are declared on :root below so they
+  // resolve inside this standalone document.
+  const ss = (o) => `font-family:${o.fontFamily};font-size:${o.fontSize}px;color:${o.color};font-weight:${o.fontWeight};font-style:${o.fontStyle}`;
+  const tagHtml = (it) => {
+    const tags = (it.tags ?? []).map(id => ITEM_TAGS.find(x => x.id === id)?.label ?? id);
+    return tags.length ? `<div class="tags">${tags.map(tg => `<span class="tag">${esc(tg)}</span>`).join("")}</div>` : "";
+  };
+  const sections = menu.sections.map(raw => {
+    const sec = normalizeSection(raw);
+    const h = sec.header;
+    const accent = h.accent || rd.sectionHeader.color;
+    const cols = sec.columns;
+    const multi = cols > 1;
+    const headStyle = [
+      ss(rd.sectionHeader), `color:${accent}`,
+      `text-align:${h.align}`,
+      h.uppercase ? "text-transform:uppercase;letter-spacing:1px" : "text-transform:none",
+      h.divider ? `border-bottom:2px solid ${accent};padding-bottom:8px` : "",
+      h.bg ? `background:${h.bg};padding:8px 12px;border-radius:8px` : "",
+    ].filter(Boolean).join(";");
+    const nameTop = (it, suffix = "") => `<div class="cardtop"><span style="${ss(rd.itemName)}">${esc(it.name)}${suffix}</span><span class="price" style="${ss(rd.price)}">₨${(it.price || 0).toLocaleString("en-PK")}</span></div>`;
+    const body = (it) => `${it.description ? `<div style="${ss(rd.itemDesc)};opacity:.78">${esc(it.description)}</div>` : ""}${tagHtml(it)}`;
+    const items = sec.items.map(it => multi
+      ? `<div class="card${it.available ? "" : " off"}${it.featured ? " feat" : ""}">
+           ${it.image ? `<div class="thumb" style="background-image:url('${esc(it.image)}')"></div>` : ""}
+           <div class="cardbody">${nameTop(it)}${body(it)}</div>
+         </div>`
+      : `<div class="row${it.available ? "" : " off"}${it.featured ? " feat" : ""}">
+           ${it.image ? `<div class="rowthumb" style="background-image:url('${esc(it.image)}')"></div>` : ""}
+           <div class="rowbody">${nameTop(it, it.available ? "" : " · unavailable")}${body(it)}</div>
+         </div>`).join("");
+    const subhead = sec.subhead ? `<div class="subhead" style="text-align:${h.align}">${esc(sec.subhead)}</div>` : "";
+    const secStyle = sec.bg ? `style="background:${sec.bg};padding:16px;border-radius:12px"` : "";
+    return `<section ${secStyle}><h2 style="${headStyle}">${sec.icon ? esc(sec.icon) + " " : ""}${esc(sec.name)}</h2>${subhead}<div class="${multi ? "gridcols" : "list"}" style="--c:${cols}">${items}</div></section>`;
+  }).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(restaurant.name)} — ${esc(menu.name)}</title>
   <style>
-    *{box-sizing:border-box} body{margin:0;background:${t.colors.bg};color:${t.colors.text};font-family:${serif ? "Georgia,serif" : "system-ui,-apple-system,Segoe UI,Roboto,sans-serif"}}
-    .wrap{max-width:720px;margin:0 auto;padding:48px 40px}
+    :root{--font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-display:'Georgia','Times New Roman',serif}
+    *{box-sizing:border-box} body{margin:0;background:${rd.pageBg};color:${rd.text};font-family:var(--font-body)}
+    .wrap{max-width:820px;margin:0 auto;padding:${rd.spacing.padding + 16}px ${rd.spacing.padding + 8}px}
     header{text-align:center;margin-bottom:36px}
-    header h1{font-size:34px;margin:0}
+    header h1{margin:0;${ss(rd.title)}}
     header .cuisine{opacity:.7;margin-top:6px}
-    header .rule{width:64px;height:3px;background:${t.colors.accent};margin:18px auto 0;border-radius:2px}
-    section{margin-bottom:30px}
-    section h2{color:${t.colors.accent};text-transform:uppercase;letter-spacing:1px;font-size:18px;margin:0 0 14px}
-    .row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid ${t.colors.accent}22}
-    .row.off{opacity:.45}
-    .name{font-weight:600;font-size:15px}
-    .desc{opacity:.7;font-size:13px;margin-top:3px}
-    .price{font-weight:700;color:${t.colors.accent};white-space:nowrap}
+    header .rule{width:64px;height:3px;background:${rd.accent};margin:18px auto 0;border-radius:2px}
+    section{margin-bottom:${rd.spacing.sectionGap}px}
+    section h2{margin:0 0 8px}
+    .subhead{opacity:.7;font-size:13px;margin-bottom:12px}
+    .gridcols{display:grid;gap:${rd.spacing.itemGap}px;grid-template-columns:repeat(var(--c),1fr)}
+    .card{border:1px solid ${rd.accent}22;border-radius:12px;overflow:hidden} .card.off,.row.off{opacity:.45}
+    .feat{border:2px solid ${rd.accent};background:${rd.accent}0F;border-radius:12px}
+    .row.feat,.card.feat .cardbody{padding:12px 14px}
+    .thumb{aspect-ratio:4/3;background-size:cover;background-position:center}
+    .cardbody{padding:12px 14px}
+    .row{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid ${rd.accent}22}
+    .row.feat{border-bottom:none}
+    .rowthumb{width:64px;height:64px;flex-shrink:0;border-radius:10px;background-size:cover;background-position:center}
+    .rowbody{flex:1}
+    .cardtop{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+    .desc{margin-top:3px}
+    .price{white-space:nowrap}
+    .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+    .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:${rd.accent}1A;color:${rd.accent}}
     @media print{ .noprint{display:none} }
+    @media (max-width:560px){ .gridcols{grid-template-columns:1fr} .wrap{padding:28px 18px} }
     .noprint{position:fixed;top:16px;right:16px}
-    .noprint button{padding:10px 18px;border:none;border-radius:8px;background:${t.colors.accent};color:#fff;font-weight:700;cursor:pointer}
+    .noprint button{padding:10px 18px;border:none;border-radius:8px;background:${rd.accent};color:#fff;font-weight:700;cursor:pointer}
   </style></head><body>
   <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
   <div class="wrap">
@@ -707,11 +829,145 @@ function exportMenu(restaurant, menu) {
   w.document.close();
 }
 
+// ── Shareable digital menu (no backend) ──────────────────────────────────────
+// The whole menu snapshot is encoded into the URL hash so the link works on any
+// device that opens it — no server required. The QR code (below) points at the
+// same URL. Very large menus produce long URLs; the QR may then be too dense to
+// scan reliably, so the copyable link is always the primary share mechanism.
+const SHARE_PREFIX = "menu=";
+
+function encodeSnapshot(restaurant, menu) {
+  // Keep only what the public view renders, so the payload stays compact.
+  const snap = {
+    r: { name: restaurant.name, cuisine: restaurant.cuisine, coverImage: restaurant.coverImage },
+    m: {
+      name: menu.name,
+      themeId: menu.themeId,
+      design: normalizeDesign(menu.design),
+      sections: menu.sections.map(s => {
+        const sec = normalizeSection(s);
+        return {
+          name: sec.name, columns: sec.columns, header: sec.header, subhead: sec.subhead, icon: sec.icon, bg: sec.bg,
+          items: sec.items.map(it => ({ name: it.name, description: it.description, price: it.price, image: it.image, available: it.available, featured: it.featured, tags: it.tags ?? [] })),
+        };
+      }),
+    },
+  };
+  const json = JSON.stringify(snap);
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeSnapshot(payload) {
+  try {
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    const snap = JSON.parse(json);
+    if (!snap?.m?.sections) return null;
+    return {
+      restaurant: { name: snap.r?.name ?? "", cuisine: snap.r?.cuisine ?? "", coverImage: snap.r?.coverImage ?? "" },
+      menu: {
+        id: "shared", name: snap.m.name ?? "Menu", themeId: snap.m.themeId ?? "modern", design: snap.m.design ?? defaultDesign(),
+        sections: snap.m.sections.map((s, i) => ({ id: `s${i}`, ...s, items: (s.items ?? []).map((it, j) => ({ id: `i${i}_${j}`, ...it })) })),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function shareUrl(restaurant, menu) {
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#${SHARE_PREFIX}${encodeSnapshot(restaurant, menu)}`;
+}
+
+function qrSrc(url, size = 220) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=0&data=${encodeURIComponent(url)}`;
+}
+
+// Share sheet: a self-contained link (menu encoded in the URL) + a scannable QR
+// pointing at it, plus the PDF export. The link carries the data, so it opens on
+// any device — but a very long menu makes a dense QR; copy-the-link always works.
+function ShareModal({ restaurant, menu, onClose }) {
+  const url = shareUrl(restaurant, menu);
+  const [copied, setCopied] = useState(false);
+  const longUrl = url.length > 1800; // QR gets hard to scan past roughly this
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(10,15,30,0.5)", backdropFilter: "blur(2px)" }} />
+      <div className="dm-card dm-modal-pop" style={{ position: "relative", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "var(--shadow-modal)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--divider)" }}>
+          <h3 className="dm-h3">Share menu</h3>
+          <IconBtn onClick={onClose}><X size={20} /></IconBtn>
+        </div>
+        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <div style={{ padding: 14, background: "#fff", borderRadius: "var(--radius-lg)", border: "1px solid var(--divider)" }}>
+              {/* QR encodes the share link; data lives in the link itself. */}
+              <img src={qrSrc(url)} alt="Menu QR code" width={220} height={220} style={{ display: "block" }} />
+            </div>
+          </div>
+          <p className="dm-small" style={{ textAlign: "center", margin: 0 }}>Scan for the digital menu, or print this QR for your tables.{longUrl && " This menu is large — the QR may be hard to scan; share the link instead."}</p>
+          <div>
+            <span className="dm-field__label" style={{ display: "block", marginBottom: 8 }}>Shareable link</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input readOnly value={url} onFocus={e => e.target.select()} className="dm-input" style={{ flex: 1, minWidth: 0, fontSize: 12 }} />
+              <Btn variant="secondary" icon={<Copy size={15} />} onClick={copy}>{copied ? "Copied" : "Copy"}</Btn>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Btn variant="secondary" icon={<ExternalLink size={16} />} onClick={() => window.open(url, "_blank")}>Open digital menu</Btn>
+            <Btn variant="ghost" icon={<Download size={16} />} onClick={() => exportMenu(restaurant, menu)}>Export PDF</Btn>
+          </div>
+          <p className="dm-small" style={{ margin: 0, color: "var(--text-secondary)" }}>The link contains the menu itself, so it opens on any device — no account needed. Re-share after edits to update what people see.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Full-screen read-only public menu, shown when the app is opened via a share
+// link (`#menu=…`). No chrome, no auth — just the menu, with print + share.
+function PublicMenuScreen({ restaurant, menu, onExit }) {
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--surface-page)" }}>
+      <header style={{ background: "var(--white)", borderBottom: "1px solid var(--divider)", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 10 }}>
+        <Logo size={22} />
+        <div style={{ flex: 1 }} />
+        <Btn variant="ghost" icon={<Download size={16} />} className="dm-hide-mobile" onClick={() => exportMenu(restaurant, menu)}>Print / PDF</Btn>
+        <Btn variant="secondary" onClick={onExit}>Explore DineMap</Btn>
+      </header>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "28px 16px 64px" }}>
+        <MenuPreview restaurant={restaurant} menu={menu} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Menu Builder Screen ──────────────────────────────────────────────────────
 const BUILDER_STEPS = [
   ["restaurant", "Restaurant"],
   ["discount", "Bank Discount"],
   ["menu", "Menu Items"],
+  ["design", "Design"],
+];
+
+// Text roles exposed in the typography designer (label + design.type key).
+const TYPE_ROLES = [
+  ["title", "Restaurant name"],
+  ["sectionHeader", "Section headers"],
+  ["itemName", "Item names"],
+  ["itemDesc", "Descriptions"],
+  ["price", "Prices"],
 ];
 
 let _bid = 0;
@@ -723,6 +979,7 @@ const newId = (p) => `${p}_${Date.now().toString(36)}_${_bid++}`;
 function MenuBuilderScreen({ target, onExit, onBack }) {
   const [step, setStep] = useState("restaurant");
   const [showPreview, setShowPreview] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState("desktop"); // desktop | mobile
 
   // Load the restaurant + menu once (client-side; this screen only mounts after
   // a user interaction, never during SSR).
@@ -742,6 +999,15 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
     themeId: loadedMenu?.themeId ?? "modern",
   }));
   const setMetaField = (k, v) => setMeta(prev => ({ ...prev, [k]: v }));
+  const coverInputRef = React.useRef(null);
+  const onCoverFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setMetaField("coverImage", reader.result);
+    reader.readAsDataURL(file);
+  };
   const country = COUNTRIES.find(c => c.id === meta.countryId) ?? COUNTRIES[0];
   const city = country.cities.find(c => c.id === meta.cityId) ?? country.cities[0];
 
@@ -762,13 +1028,27 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
   const setDiscountField = (k, v) => setDiscount(prev => ({ ...prev, [k]: v }));
   const discountBank = BANKS.find(b => b.id === discount.bankId) ?? BANKS[0];
 
-  // Menu sections + items (menu-level)
+  // Menu sections + items (menu-level). Normalise on load so older stored menus
+  // gain the column/header fields the builder + preview rely on.
   const [sections, setSections] = useState(() =>
-    loadedMenu && loadedMenu.sections.length ? loadedMenu.sections : [{ id: newId("sec"), name: "Starters", items: [] }]
+    (loadedMenu && loadedMenu.sections.length ? loadedMenu.sections : [{ ...blankSection("Starters"), id: newId("sec") }]).map(normalizeSection)
   );
   const [active, setActive] = useState(sections[0].id);
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  // Drag-and-drop cursors (index of the item being dragged). Native HTML5 DnD —
+  // no library. `dragSec`/`dragItem` hold the source index mid-drag.
+  const [dragSec, setDragSec] = useState(null);
+  const [dragItem, setDragItem] = useState(null);
+
+  // Element-level design overrides (typography, colours/backgrounds, spacing) on
+  // top of the chosen template. Loaded + normalised from the stored menu.
+  const [design, setDesign] = useState(() => normalizeDesign(loadedMenu?.design));
+  const setTypeField = (roleKey, k, v) => setDesign(prev => ({ ...prev, type: { ...prev.type, [roleKey]: { ...prev.type[roleKey], [k]: v } } }));
+  const setPageField = (k, v) => setDesign(prev => ({ ...prev, page: { ...prev.page, [k]: v } }));
+  const setSpacingField = (k, v) => setDesign(prev => ({ ...prev, spacing: { ...prev.spacing, [k]: Number(v) } }));
+  const resetDesign = () => setDesign(defaultDesign());
 
   // Build a live restaurant+menu object for the preview / export.
   const liveRestaurant = {
@@ -779,7 +1059,7 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
     reviews: loaded?.reviews ?? [],
     menus: [],
   };
-  const liveMenu = { id: target.menuId, name: meta.menuName, themeId: meta.themeId, sections, views: loadedMenu?.views ?? 0, updatedAt: Date.now() };
+  const liveMenu = { id: target.menuId, name: meta.menuName, themeId: meta.themeId, design, sections, views: loadedMenu?.views ?? 0, updatedAt: Date.now() };
 
   const activeSection = sections.find(s => s.id === active) ?? sections[0];
   const counts = Object.fromEntries(sections.map(s => [s.id, s.items.length]));
@@ -790,7 +1070,7 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
   const toggle = (id) => updateActiveItems(items => items.map(it => it.id === id ? { ...it, available: !it.available } : it));
   const removeItem = (id) => updateActiveItems(items => items.filter(it => it.id !== id));
   const addSection = () => {
-    const sec = { id: newId("sec"), name: `New Section ${sections.length + 1}`, items: [] };
+    const sec = { ...blankSection(`New Section ${sections.length + 1}`), id: newId("sec") };
     setSections(prev => [...prev, sec]);
     setActive(sec.id);
   };
@@ -798,11 +1078,19 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
   const removeSection = (id) => {
     setSections(prev => {
       const next = prev.filter(s => s.id !== id);
-      const safe = next.length ? next : [{ id: newId("sec"), name: "Starters", items: [] }];
+      const safe = next.length ? next : [{ ...blankSection("Starters"), id: newId("sec") }];
       if (id === active) setActive(safe[0].id);
       return safe;
     });
   };
+  // Layout + header styling for the active section.
+  const setSectionColumns = (id, n) => setSections(prev => prev.map(s => s.id === id ? { ...s, columns: n } : s));
+  const setSectionField = (id, k, v) => setSections(prev => prev.map(s => s.id === id ? { ...s, [k]: v } : s));
+  const setHeaderField = (id, k, v) => setSections(prev => prev.map(s => s.id === id ? { ...s, header: { ...defaultHeader(), ...s.header, [k]: v } } : s));
+  // Reorder helper: move array element from `from` to `to`.
+  const reorder = (arr, from, to) => { const next = arr.slice(); const [m] = next.splice(from, 1); next.splice(to, 0, m); return next; };
+  const moveSection = (to) => { if (dragSec === null || dragSec === to) return; setSections(prev => reorder(prev, dragSec, to)); setDragSec(null); };
+  const moveItem = (to) => { if (dragItem === null || dragItem === to) return; updateActiveItems(items => reorder(items, dragItem, to)); setDragItem(null); };
   const saveItem = (form) => {
     updateActiveItems(items => {
       if (editing) return items.map(it => it.id === editing.id ? { ...it, ...form } : it);
@@ -822,7 +1110,7 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
       reviews: loaded?.reviews ?? [],
       menus: loaded?.menus ?? [],
     });
-    saveMenu(target.restaurantId, { id: target.menuId, name: meta.menuName.trim() || "Untitled Menu", themeId: meta.themeId, sections, views: loadedMenu?.views ?? 0, updatedAt: Date.now() });
+    saveMenu(target.restaurantId, { id: target.menuId, name: meta.menuName.trim() || "Untitled Menu", themeId: meta.themeId, design, sections, views: loadedMenu?.views ?? 0, updatedAt: Date.now() });
     onExit();
   };
 
@@ -847,6 +1135,7 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
         </div>
         <div style={{ flex: 1 }} />
         <Btn variant="ghost" icon={<Eye size={17} />} className="dm-hide-mobile" onClick={() => setShowPreview(true)}>Preview</Btn>
+        <Btn variant="ghost" icon={<Share2 size={17} />} className="dm-hide-mobile" onClick={() => setShowShare(true)}>Share</Btn>
         <Btn variant="ghost" icon={<Download size={17} />} className="dm-hide-mobile" onClick={() => exportMenu(liveRestaurant, liveMenu)}>Export</Btn>
         <Btn icon={<Check size={17} />} onClick={publish}>Publish</Btn>
       </header>
@@ -892,27 +1181,11 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
                 <span className="dm-field__label" style={{ display: "block", marginBottom: 10 }}>Cover image</span>
                 <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ width: 140, height: 90, borderRadius: "var(--radius-md)", backgroundImage: `url(${meta.coverImage})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0 }} />
-                  <Btn variant="secondary" size="sm" icon={<Camera size={15} />}>Replace cover</Btn>
+                  <input ref={coverInputRef} type="file" accept="image/*" onChange={onCoverFile} style={{ display: "none" }} />
+                  <Btn variant="secondary" size="sm" icon={<Camera size={15} />} onClick={() => coverInputRef.current?.click()}>Replace cover</Btn>
                 </div>
               </div>
 
-              <div>
-                <span className="dm-field__label" style={{ display: "block", marginBottom: 10 }}>Menu theme (design)</span>
-                <div className="dm-grid-4">
-                  {MENU_THEMES.map(t => {
-                    const on = meta.themeId === t.id;
-                    return (
-                      <button key={t.id} onClick={() => setMetaField("themeId", t.id)} style={{ textAlign: "left", cursor: "pointer", padding: 14, borderRadius: "var(--radius-lg)", background: "var(--white)", border: on ? "2px solid var(--brand)" : "2px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
-                        <div className="dm-swatch"><span style={{ background: t.colors.bg }} /><span style={{ background: t.colors.accent }} /><span style={{ background: t.colors.text }} /></div>
-                        <div>
-                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)" }}>{t.name}</div>
-                          <div className="dm-small">{t.font}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
               <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8 }}>
                 <Btn onClick={() => setStep("discount")} iconRight={<ArrowRight size={17} />}>Next: Bank Discount</Btn>
               </div>
@@ -990,11 +1263,13 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
                 <span className="dm-label">Menu Sections</span>
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
-                {sections.map(c => {
+                {sections.map((c, si) => {
                   const on = active === c.id;
                   return (
-                    <div key={c.id} onClick={() => setActive(c.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", marginBottom: 4, cursor: "pointer", borderRadius: "var(--radius-md)", borderLeft: on ? "3px solid var(--brand)" : "3px solid transparent", background: on ? "var(--surface-tint)" : "transparent" }}>
-                      <GripVertical size={15} color="var(--gray-200)" />
+                    <div key={c.id} onClick={() => setActive(c.id)}
+                      draggable onDragStart={() => setDragSec(si)} onDragOver={e => e.preventDefault()} onDrop={() => moveSection(si)} onDragEnd={() => setDragSec(null)}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", marginBottom: 4, cursor: "pointer", borderRadius: "var(--radius-md)", borderLeft: on ? "3px solid var(--brand)" : "3px solid transparent", background: on ? "var(--surface-tint)" : "transparent", opacity: dragSec === si ? 0.4 : 1 }}>
+                      <GripVertical size={15} color="var(--gray-200)" style={{ cursor: "grab" }} />
                       <input value={c.name} onClick={e => e.stopPropagation()} onChange={e => renameSection(c.id, e.target.value)} style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)", outline: "none" }} />
                       <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", background: "var(--surface-muted)", borderRadius: 999, padding: "2px 8px" }}>{counts[c.id]}</span>
                       {sections.length > 1 && <button onClick={e => { e.stopPropagation(); removeSection(c.id); }} className="dm-iconbtn" style={{ width: 26, height: 26 }} title="Delete section"><Trash2 size={13} color="var(--red-500)" /></button>}
@@ -1015,10 +1290,53 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
                 <h2 className="dm-h3" style={{ margin: 0 }}>{activeSection?.name}</h2>
                 <Btn onClick={() => { setEditing(null); setShowModal(true); }} icon={<Plus size={17} />}>Add Item</Btn>
               </header>
+              {/* Per-section layout + header design */}
+              {activeSection && (
+                <div style={{ background: "var(--white)", borderBottom: "1px solid var(--divider)", padding: "12px 24px", display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <LayoutGrid size={15} color="var(--text-secondary)" />
+                    <span className="dm-small" style={{ fontWeight: 600 }}>Columns</span>
+                    <div style={{ display: "flex", gap: 3, background: "var(--surface-muted)", borderRadius: 9, padding: 3 }}>
+                      {[1, 2, 3, 4, 5, 6].map(n => {
+                        const on = (activeSection.columns || 1) === n;
+                        return <button key={n} onClick={() => setSectionColumns(activeSection.id, n)} style={{ width: 28, height: 28, border: "none", cursor: "pointer", borderRadius: 7, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, background: on ? "var(--white)" : "transparent", color: on ? "var(--brand)" : "var(--text-secondary)", boxShadow: on ? "var(--shadow-card)" : "none" }}>{n}</button>;
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Palette size={15} color="var(--text-secondary)" />
+                    <span className="dm-small" style={{ fontWeight: 600 }}>Header</span>
+                    <div style={{ display: "flex", gap: 3, background: "var(--surface-muted)", borderRadius: 9, padding: 3 }}>
+                      {["left", "center"].map(a => {
+                        const on = (activeSection.header?.align || "left") === a;
+                        return <button key={a} onClick={() => setHeaderField(activeSection.id, "align", a)} style={{ padding: "5px 11px", border: "none", cursor: "pointer", borderRadius: 7, fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 12, textTransform: "capitalize", background: on ? "var(--white)" : "transparent", color: on ? "var(--brand)" : "var(--text-secondary)", boxShadow: on ? "var(--shadow-card)" : "none" }}>{a}</button>;
+                      })}
+                    </div>
+                    <Switch checked={activeSection.header?.uppercase ?? true} onChange={v => setHeaderField(activeSection.id, "uppercase", v)} label="CAPS" />
+                    <Switch checked={activeSection.header?.divider ?? true} onChange={v => setHeaderField(activeSection.id, "divider", v)} label="Rule" />
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} title="Header colour (clear to use theme accent)">
+                      <input type="color" value={activeSection.header?.accent || themeOf(meta.themeId).colors.accent} onChange={e => setHeaderField(activeSection.id, "accent", e.target.value)} style={{ width: 26, height: 26, border: "1px solid var(--border)", borderRadius: 6, padding: 0, background: "none", cursor: "pointer" }} />
+                      {activeSection.header?.accent && <button onClick={() => setHeaderField(activeSection.id, "accent", null)} className="dm-small" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--text-secondary)", textDecoration: "underline" }}>reset</button>}
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input value={activeSection.icon || ""} onChange={e => setSectionField(activeSection.id, "icon", e.target.value)} placeholder="🍽️" maxLength={2} title="Header icon (emoji)" className="dm-input" style={{ width: 44, padding: "7px 8px", fontSize: 15, textAlign: "center" }} />
+                    <input value={activeSection.subhead || ""} onChange={e => setSectionField(activeSection.id, "subhead", e.target.value)} placeholder="Sub-header / description" className="dm-input" style={{ width: 200, padding: "7px 10px", fontSize: 13 }} />
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} title="Section background">
+                      <span className="dm-small" style={{ fontWeight: 600 }}>BG</span>
+                      <input type="color" value={activeSection.bg || "#ffffff"} onChange={e => setSectionField(activeSection.id, "bg", e.target.value)} style={{ width: 26, height: 26, border: "1px solid var(--border)", borderRadius: 6, padding: 0, cursor: "pointer" }} />
+                      {activeSection.bg && <button onClick={() => setSectionField(activeSection.id, "bg", null)} className="dm-small" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--text-secondary)", textDecoration: "underline" }}>clear</button>}
+                    </label>
+                  </div>
+                </div>
+              )}
               <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
                 <div className="dm-grid-3">
-                  {activeSection?.items.map(it => (
-                    <div key={it.id} className="dm-card" style={{ position: "relative" }}>
+                  {activeSection?.items.map((it, ii) => (
+                    <div key={it.id} className="dm-card"
+                      draggable onDragStart={() => setDragItem(ii)} onDragOver={e => e.preventDefault()} onDrop={() => moveItem(ii)} onDragEnd={() => setDragItem(null)}
+                      style={{ position: "relative", opacity: dragItem === ii ? 0.4 : 1, cursor: "grab", ...(it.featured ? { outline: "2px solid var(--brand)", outlineOffset: -2 } : {}) }}>
+                      {it.featured && <span style={{ position: "absolute", top: 10, left: 10, zIndex: 1, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--brand)", borderRadius: 999, padding: "3px 9px", display: "flex", alignItems: "center", gap: 4 }}><Star size={11} fill="#fff" />Featured</span>}
                       {it.image
                         ? <div style={{ aspectRatio: "4/3", backgroundImage: `url(${it.image})`, backgroundSize: "cover", backgroundPosition: "center", opacity: it.available ? 1 : 0.5 }} />
                         : <div style={{ aspectRatio: "4/3", border: "2px dashed var(--border)", margin: 12, borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--text-secondary)" }}><Camera size={24} color="var(--text-secondary)" /><span className="dm-small">No photo</span></div>
@@ -1050,18 +1368,137 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
             </main>
           </div>
         )}
+
+        {/* ── Design step ── */}
+        {step === "design" && (() => {
+          const dTheme = themeOf(meta.themeId);
+          const roleColorDefault = { title: dTheme.colors.text, sectionHeader: dTheme.colors.accent, itemName: dTheme.colors.text, itemDesc: dTheme.colors.text, price: dTheme.colors.accent };
+          return (
+          <div className="dm-builder" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            <div className="dm-wrap" style={{ flex: 1, overflowY: "auto", padding: "32px", maxWidth: 760 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div>
+                  <h2 className="dm-h2" style={{ marginBottom: 6 }}>Design your menu</h2>
+                  <p className="dm-small" style={{ marginBottom: 0 }}>Pick a template to start, then customise anything. Templates are just starting points — your edits are kept, and anything you don&apos;t touch follows the template.</p>
+                </div>
+                <Btn variant="ghost" size="sm" onClick={resetDesign}>Reset design</Btn>
+              </div>
+
+              {/* Template picker */}
+              <div style={{ marginTop: 24 }}>
+                <span className="dm-field__label" style={{ display: "block", marginBottom: 10 }}>Template</span>
+                <div className="dm-grid-4">
+                  {MENU_THEMES.map(t => {
+                    const on = meta.themeId === t.id;
+                    return (
+                      <button key={t.id} onClick={() => setMetaField("themeId", t.id)} style={{ textAlign: "left", cursor: "pointer", padding: 14, borderRadius: "var(--radius-lg)", background: "var(--white)", border: on ? "2px solid var(--brand)" : "2px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div className="dm-swatch"><span style={{ background: t.colors.bg }} /><span style={{ background: t.colors.accent }} /><span style={{ background: t.colors.text }} /></div>
+                        <div>
+                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)" }}>{t.name}</div>
+                          <div className="dm-small">{t.font}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Typography */}
+              <h3 className="dm-h3" style={{ margin: "30px 0 12px" }}>Typography</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {TYPE_ROLES.map(([key, label]) => {
+                  const r = design.type[key];
+                  return (
+                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: "var(--white)", border: "1px solid var(--divider)", borderRadius: "var(--radius-md)", padding: "10px 14px" }}>
+                      <span style={{ width: 130, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 13 }}>{label}</span>
+                      <select className="dm-input" value={r.font} onChange={e => setTypeField(key, "font", e.target.value)} style={{ width: 150, padding: "7px 10px", fontSize: 13 }}>
+                        {FONT_FAMILIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                      </select>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6 }} title="Font size (px)">
+                        <input type="number" min={9} max={64} value={r.size} onChange={e => setTypeField(key, "size", Number(e.target.value) || r.size)} className="dm-input" style={{ width: 64, padding: "7px 8px", fontSize: 13 }} />
+                        <span className="dm-small">px</span>
+                      </label>
+                      <button onClick={() => setTypeField(key, "bold", !r.bold)} title="Bold" style={{ width: 32, height: 32, borderRadius: 7, cursor: "pointer", fontWeight: 800, fontSize: 14, border: r.bold ? "1px solid var(--brand)" : "1px solid var(--border)", background: r.bold ? "var(--surface-tint)" : "var(--white)", color: r.bold ? "var(--brand)" : "var(--text-secondary)" }}>B</button>
+                      <button onClick={() => setTypeField(key, "italic", !r.italic)} title="Italic" style={{ width: 32, height: 32, borderRadius: 7, cursor: "pointer", fontStyle: "italic", fontSize: 14, border: r.italic ? "1px solid var(--brand)" : "1px solid var(--border)", background: r.italic ? "var(--surface-tint)" : "var(--white)", color: r.italic ? "var(--brand)" : "var(--text-secondary)" }}>I</button>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} title="Text colour (reset to follow template)">
+                        <input type="color" value={r.color || roleColorDefault[key]} onChange={e => setTypeField(key, "color", e.target.value)} style={{ width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: 0, background: "none", cursor: "pointer" }} />
+                        {r.color && <button onClick={() => setTypeField(key, "color", null)} className="dm-small" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--text-secondary)", textDecoration: "underline" }}>reset</button>}
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Colours & background */}
+              <h3 className="dm-h3" style={{ margin: "30px 0 12px" }}>Colours &amp; background</h3>
+              <div style={{ display: "flex", gap: 22, flexWrap: "wrap", background: "var(--white)", border: "1px solid var(--divider)", borderRadius: "var(--radius-md)", padding: "14px 16px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="dm-small" style={{ fontWeight: 600 }}>Page text</span>
+                  <input type="color" value={design.page.text || dTheme.colors.text} onChange={e => setPageField("text", e.target.value)} style={{ width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: 0, cursor: "pointer" }} />
+                  {design.page.text && <button onClick={() => setPageField("text", null)} className="dm-small" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--text-secondary)", textDecoration: "underline" }}>reset</button>}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="dm-small" style={{ fontWeight: 600 }}>Page background</span>
+                  <input type="color" value={design.page.bg || dTheme.colors.bg} onChange={e => setPageField("bg", e.target.value)} disabled={design.page.bgGradient !== "none"} style={{ width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: 0, cursor: "pointer", opacity: design.page.bgGradient !== "none" ? 0.4 : 1 }} />
+                  {design.page.bg && <button onClick={() => setPageField("bg", null)} className="dm-small" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--text-secondary)", textDecoration: "underline" }}>reset</button>}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="dm-small" style={{ fontWeight: 600 }}>Gradient</span>
+                  <select className="dm-input" value={design.page.bgGradient} onChange={e => setPageField("bgGradient", e.target.value)} style={{ width: 130, padding: "7px 10px", fontSize: 13 }}>
+                    {GRADIENT_PRESETS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              {/* Spacing */}
+              <h3 className="dm-h3" style={{ margin: "30px 0 12px" }}>Spacing</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, background: "var(--white)", border: "1px solid var(--divider)", borderRadius: "var(--radius-md)", padding: "16px" }}>
+                {[["itemGap", "Item gap", 0, 40], ["sectionGap", "Section gap", 8, 80], ["padding", "Page padding", 8, 72]].map(([k, label, min, max]) => (
+                  <label key={k} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <span style={{ width: 110, fontSize: 13, fontWeight: 600 }}>{label}</span>
+                    <input type="range" min={min} max={max} value={design.spacing[k]} onChange={e => setSpacingField(k, e.target.value)} style={{ flex: 1, accentColor: "var(--brand)" }} />
+                    <span className="dm-small" style={{ width: 44, textAlign: "right" }}>{design.spacing[k]}px</span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 28, flexWrap: "wrap", gap: 12 }}>
+                <Btn variant="ghost" onClick={() => setStep("menu")}>Back to items</Btn>
+                <Btn icon={<Check size={17} />} onClick={publish}>Publish</Btn>
+              </div>
+            </div>
+
+            {/* Live preview rail */}
+            <aside className="dm-hide-mobile" style={{ width: 400, flexShrink: 0, borderLeft: "1px solid var(--divider)", background: "var(--surface-muted)", overflowY: "auto", padding: 20 }}>
+              <span className="dm-label" style={{ display: "block", marginBottom: 10 }}>Live preview</span>
+              <MenuPreview restaurant={liveRestaurant} menu={liveMenu} />
+            </aside>
+          </div>
+          );
+        })()}
       </div>
 
       {/* Item Editor Modal */}
       {showModal && <ItemEditorModal editing={editing} onClose={() => setShowModal(false)} onSave={saveItem} />}
 
-      {/* Preview Modal */}
+      {/* Share Modal */}
+      {showShare && <ShareModal restaurant={liveRestaurant} menu={liveMenu} onClose={() => setShowShare(false)} />}
+
+      {/* Preview Modal — Desktop / Mobile / Print views */}
       {showPreview && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: 20, gap: 14 }}>
           <div onClick={() => setShowPreview(false)} style={{ position: "absolute", inset: 0, background: "rgba(10,15,30,0.6)", backdropFilter: "blur(4px)" }} />
-          <div className="dm-modal-pop" style={{ position: "relative", width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-modal)" }}>
-            <button onClick={() => setShowPreview(false)} className="dm-iconbtn dm-iconbtn--glass" style={{ position: "absolute", top: 14, right: 14, zIndex: 2 }}><X size={18} /></button>
-            <MenuPreview restaurant={liveRestaurant} menu={liveMenu} />
+          {/* Device toggle */}
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, background: "var(--white)", borderRadius: "var(--radius-pill)", padding: 6, boxShadow: "var(--shadow-card)" }}>
+            {[["desktop", "Desktop"], ["mobile", "Mobile"]].map(([id, label]) => (
+              <button key={id} onClick={() => setPreviewDevice(id)} style={{ padding: "7px 16px", border: "none", cursor: "pointer", borderRadius: 999, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, background: previewDevice === id ? "var(--brand)" : "transparent", color: previewDevice === id ? "#fff" : "var(--text-secondary)" }}>{label}</button>
+            ))}
+            <span style={{ width: 1, height: 22, background: "var(--divider)" }} />
+            <button onClick={() => exportMenu(liveRestaurant, liveMenu)} style={{ padding: "7px 14px", border: "none", cursor: "pointer", borderRadius: 999, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, background: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}><Download size={14} />Print view</button>
+            <button onClick={() => setShowPreview(false)} className="dm-iconbtn" style={{ width: 32, height: 32 }}><X size={17} /></button>
+          </div>
+          <div className="dm-modal-pop" style={{ position: "relative", width: "100%", maxWidth: previewDevice === "mobile" ? 390 : 760, maxHeight: "84vh", overflowY: "auto", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-modal)", transition: "max-width 0.2s" }}>
+            <MenuPreview restaurant={liveRestaurant} menu={liveMenu} device={previewDevice} />
           </div>
         </div>
       )}
@@ -1077,6 +1514,7 @@ function ItemEditorModal({ editing, onClose, onSave }) {
     price: editing?.price ?? "",
     image: editing?.image ?? null,
     available: editing?.available ?? true,
+    featured: editing?.featured ?? false,
     tags: editing?.tags ?? [],
   });
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
@@ -1121,7 +1559,10 @@ function ItemEditorModal({ editing, onClose, onSave }) {
               </div>
             )}
           </div>
-          <Switch label="Available on menu" checked={form.available} onChange={v => set("available", v)} />
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+            <Switch label="Available on menu" checked={form.available} onChange={v => set("available", v)} />
+            <Switch label="Highlight as featured" checked={form.featured} onChange={v => set("featured", v)} />
+          </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: "18px 24px", borderTop: "1px solid var(--divider)" }}>
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
@@ -1176,6 +1617,7 @@ function DashboardScreen({ data, onEditMenu, onAddMenu, onCreateRestaurant }) {
   const [tab, setTab] = useState("menus");
   const [selectedId, setSelectedId] = useState(data[0]?.id ?? null);
   const [preview, setPreview] = useState(null);
+  const [share, setShare] = useState(null);
 
   // Keep selection valid as the store changes (e.g. after deleting a restaurant).
   const restaurant = data.find(r => r.id === selectedId) ?? data[0];
@@ -1264,6 +1706,7 @@ function DashboardScreen({ data, onEditMenu, onAddMenu, onCreateRestaurant }) {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: "auto" }}>
                       <Btn size="sm" icon={<Pencil size={14} />} onClick={() => onEditMenu(restaurant.id, menu.id)}>Edit</Btn>
                       <Btn size="sm" variant="secondary" icon={<Eye size={14} />} onClick={() => setPreview({ restaurant, menu })}>Preview</Btn>
+                      <Btn size="sm" variant="secondary" icon={<Share2 size={14} />} onClick={() => setShare({ restaurant, menu })}>Share</Btn>
                       <Btn size="sm" variant="secondary" icon={<Download size={14} />} onClick={() => exportMenu(restaurant, menu)}>Export</Btn>
                       <Btn size="sm" variant="secondary" icon={<Copy size={14} />} onClick={() => { const c = duplicateMenu(restaurant.id, menu.id); if (c) onEditMenu(restaurant.id, c.id); }}>Duplicate</Btn>
                     </div>
@@ -1381,6 +1824,9 @@ function DashboardScreen({ data, onEditMenu, onAddMenu, onCreateRestaurant }) {
           </div>
         </div>
       )}
+
+      {/* Share modal */}
+      {share && <ShareModal restaurant={share.restaurant} menu={share.menu} onClose={() => setShare(null)} />}
     </div>
   );
 }
@@ -1395,6 +1841,7 @@ export default function App() {
   const [showLocation, setShowLocation] = useState(false);
   const [location, setLocation] = useState({ countryId: "pk", cityId: "lahore", area: null });
   const [builderTarget, setBuilderTarget] = useState(null);
+  const [shared, setShared] = useState(null); // decoded public menu from a #menu= share link
   const router = useRouter();
   const authed = useAuthed();
   const ownerData = useOwnerData();
@@ -1409,6 +1856,13 @@ export default function App() {
   // which screen to land on. The menu builder needs a specific restaurant+menu
   // target, so a bare `?screen=menu-builder` falls back to the dashboard.
   useEffect(() => {
+    // A share link encodes the menu in the hash (`#menu=…`) — decode and show
+    // the public read-only view, bypassing the normal app entirely.
+    const hash = window.location.hash || "";
+    if (hash.startsWith(`#${SHARE_PREFIX}`)) {
+      const decoded = decodeSnapshot(hash.slice(SHARE_PREFIX.length + 1));
+      if (decoded) { setShared(decoded); return; }
+    }
     const target = new URLSearchParams(window.location.search).get("screen");
     if (target) {
       setScreen(target === "menu-builder" ? "dashboard" : target);
@@ -1454,6 +1908,17 @@ export default function App() {
   const locationLabel = location.area ? `${location.area}, ${currentCity.name}` : `${currentCity.name}, ${currentCountry.name}`;
 
   const chrome = screen !== "menu-builder";
+
+  // Public share view takes over the whole screen (no navbar/FAB).
+  if (shared) {
+    return (
+      <PublicMenuScreen
+        restaurant={shared.restaurant}
+        menu={shared.menu}
+        onExit={() => { window.history.replaceState(null, "", window.location.pathname); setShared(null); setScreen("home"); }}
+      />
+    );
+  }
 
   return (
     <>
