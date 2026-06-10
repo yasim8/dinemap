@@ -149,7 +149,8 @@ export const ITEM_TAGS = [
   { id: "new", label: "🆕 New" },
 ];
 
-// Themes for the menu designer
+// Themes for the menu designer. A theme is the visual base (colours + base font)
+// that a template starts from; the builder's Layout step lets owners switch theme.
 export const MENU_THEMES = [
   { id: "modern", name: "Modern", colors: { bg: "#FFFFFF", accent: "#FF6B2B", text: "#0A0F1E" }, font: "Sans" },
   { id: "minimal", name: "Minimalist", colors: { bg: "#FAFAF7", accent: "#1C3E7D", text: "#1A1A1A" }, font: "Sans" },
@@ -157,6 +158,189 @@ export const MENU_THEMES = [
   { id: "rustic", name: "Rustic", colors: { bg: "#EFE7D6", accent: "#9C4722", text: "#3B2F23" }, font: "Serif" },
   { id: "luxury", name: "Luxury", colors: { bg: "#0A0F1E", accent: "#C8A24B", text: "#FFFFFF" }, font: "Serif" },
   { id: "vintage", name: "Vintage", colors: { bg: "#F3E9D8", accent: "#8B4513", text: "#3A2A1A" }, font: "Serif" },
+  { id: "cafe", name: "Café", colors: { bg: "#F5EEE3", accent: "#7B5230", text: "#3A2A1A" }, font: "Serif" },
+  { id: "pizza", name: "Trattoria", colors: { bg: "#FFF8F0", accent: "#C0392B", text: "#2B1A14" }, font: "Sans" },
+  { id: "bar", name: "Lounge", colors: { bg: "#14141A", accent: "#D4AF37", text: "#F4F2EC" }, font: "Serif" },
+  { id: "blush", name: "Blush", colors: { bg: "#FBF3F4", accent: "#BE8A90", text: "#4A3B3D" }, font: "Serif" },
+  { id: "harvest", name: "Harvest", colors: { bg: "#F3EAD9", accent: "#B5651D", text: "#3B2A18" }, font: "Serif" },
+];
+
+// ── Template library ──────────────────────────────────────────────────────────
+// Pre-built starting points shown in the Template Gallery before the builder
+// opens. Each template seeds a theme + a section layout (columns, headers) + a
+// little sample content, so owners never start from a blank form. Sections/items
+// are authored without ids; `buildMenuFromTemplate` (store) assigns them on use.
+// `previewName`/`cuisine` only flavour the gallery thumbnail.
+export const TEMPLATE_CATEGORIES = [
+  { id: "restaurant", label: "Restaurant" },
+  { id: "business", label: "Business Type" },
+  { id: "event", label: "Event" },
+];
+
+const t = (name, description, price, extra = {}) => ({ name, description, price, available: true, tags: [], ...extra });
+
+export const MENU_TEMPLATES = [
+  // ── Restaurant ──
+  {
+    id: "modern-restaurant", name: "Modern Restaurant", category: "restaurant",
+    description: "Clean, photo-friendly two-column layout for contemporary spots.",
+    previewName: "The Larder", cuisine: "Contemporary · Grill", themeId: "modern",
+    sections: [
+      { name: "Starters", icon: "🥗", columns: 2, items: [
+        t("Burrata & Heirloom Tomato", "Creamy burrata, basil oil, aged balsamic", 950, { tags: ["veg", "chefspecial"], featured: true }),
+        t("Crispy Calamari", "Lightly fried, lemon aioli, charred lemon", 1100, { tags: ["bestseller"] }),
+      ] },
+      { name: "Main Course", icon: "🍽️", columns: 2, items: [
+        t("Charred Ribeye", "300g grass-fed ribeye, peppercorn jus, fries", 3200, { tags: ["bestseller"], featured: true }),
+        t("Miso Glazed Salmon", "Pan-seared salmon, sesame greens", 2400, {}),
+        t("Wild Mushroom Risotto", "Arborio rice, truffle, parmesan", 1800, { tags: ["veg"] }),
+      ] },
+      { name: "Desserts", icon: "🍰", columns: 2, items: [
+        t("Molten Chocolate Cake", "Warm centre, vanilla bean ice cream", 750, { tags: ["bestseller"] }),
+        t("Lemon Tart", "Torched meringue, raspberry coulis", 700, { tags: ["veg"] }),
+      ] },
+    ],
+  },
+  {
+    id: "luxury-fine-dining", name: "Luxury Fine Dining", category: "restaurant",
+    description: "Dark, gold-accented single-column menu with centred headers.",
+    previewName: "Maison Noir", cuisine: "Modern French", themeId: "luxury",
+    design: { page: { bgGradient: "ink" }, type: { title: { font: "serif", size: 34, bold: true, italic: true } } },
+    sections: [
+      { name: "Hors d'Œuvres", columns: 1, header: { align: "center", uppercase: true, divider: true }, items: [
+        t("Oysters Rockefeller", "Champagne mignonette, sea herbs", 1800, { featured: true }),
+        t("Foie Gras Torchon", "Brioche, fig, sauternes gelée", 2200, {}),
+      ] },
+      { name: "Le Plat Principal", columns: 1, header: { align: "center", uppercase: true, divider: true }, items: [
+        t("Châteaubriand", "Black truffle, pomme purée, bordelaise", 5600, { tags: ["chefspecial"], featured: true }),
+        t("Turbot Meunière", "Brown butter, capers, confit lemon", 4200, {}),
+      ] },
+      { name: "Dessert", columns: 1, header: { align: "center", uppercase: true, divider: true }, items: [
+        t("Grand Marnier Soufflé", "Crème anglaise, candied orange", 1400, {}),
+      ] },
+    ],
+  },
+  {
+    id: "elegant-bistro", name: "Elegant Bistro", category: "restaurant",
+    description: "Warm, serif, classic name-leader-price rows.",
+    previewName: "Petit Jardin", cuisine: "European Bistro", themeId: "elegant",
+    sections: [
+      { name: "To Begin", columns: 1, items: [
+        t("French Onion Soup", "Gruyère crouton, caramelised onion broth", 850, {}),
+        t("Steak Tartare", "Hand-cut beef, capers, quail egg", 1400, { tags: ["chefspecial"] }),
+      ] },
+      { name: "Plats", columns: 1, items: [
+        t("Coq au Vin", "Braised chicken, red wine, lardons", 2100, { featured: true }),
+        t("Ratatouille", "Provençal stewed vegetables, herbs", 1500, { tags: ["veg", "vegan"] }),
+      ] },
+      { name: "Fromage & Sweet", columns: 2, items: [
+        t("Cheese Board", "Three cheeses, honeycomb, walnuts", 1300, { tags: ["veg"] }),
+        t("Crème Brûlée", "Tahitian vanilla, burnt sugar", 700, {}),
+      ] },
+    ],
+  },
+  // ── Business Type ──
+  {
+    id: "cozy-cafe", name: "Cozy Café", category: "business",
+    description: "Friendly café layout — coffee, tea and light bites.",
+    previewName: "Bean & Bloom", cuisine: "Café · Brunch", themeId: "cafe",
+    sections: [
+      { name: "Coffee", icon: "☕", columns: 2, items: [
+        t("Flat White", "Double ristretto, silky microfoam", 450, { tags: ["bestseller"] }),
+        t("Cold Brew", "18-hour steep, over ice", 480, {}),
+        t("Spiced Chai Latte", "House masala, steamed milk", 420, {}),
+      ] },
+      { name: "Tea", icon: "🍵", columns: 2, items: [
+        t("Earl Grey", "Bergamot, loose leaf", 350, { tags: ["veg"] }),
+        t("Moroccan Mint", "Fresh mint, gunpowder green", 380, { tags: ["veg"] }),
+      ] },
+      { name: "Light Bites", icon: "🥐", columns: 2, items: [
+        t("Butter Croissant", "Baked fresh each morning", 320, { tags: ["veg"] }),
+        t("Avocado Toast", "Sourdough, chilli, lime, feta", 780, { tags: ["veg"], featured: true }),
+      ] },
+    ],
+  },
+  {
+    id: "pizza-parlor", name: "Pizza Parlor", category: "business",
+    description: "Bold trattoria menu for a wood-fired pizza joint.",
+    previewName: "Forno Rosso", cuisine: "Italian · Pizza", themeId: "pizza",
+    sections: [
+      { name: "Wood-Fired Pizzas", icon: "🍕", columns: 2, items: [
+        t("Margherita", "San Marzano, fior di latte, basil", 1200, { tags: ["veg", "bestseller"], featured: true }),
+        t("Diavola", "Spicy salami, chilli, mozzarella", 1500, { tags: ["spicy"] }),
+        t("Quattro Formaggi", "Mozzarella, gorgonzola, fontina, parmesan", 1600, { tags: ["veg"] }),
+      ] },
+      { name: "Antipasti", icon: "🫒", columns: 2, items: [
+        t("Bruschetta", "Tomato, garlic, basil, olive oil", 650, { tags: ["veg", "vegan"] }),
+        t("Arancini", "Saffron risotto balls, marinara", 750, { tags: ["veg"] }),
+      ] },
+      { name: "Dolci", icon: "🍮", columns: 2, items: [
+        t("Tiramisù", "Espresso-soaked savoiardi, mascarpone", 600, { tags: ["bestseller"] }),
+      ] },
+    ],
+  },
+  {
+    id: "bar-lounge", name: "Bar & Lounge", category: "business",
+    description: "Moody, gold-on-charcoal cocktail & small-plates menu.",
+    previewName: "The Gilded Owl", cuisine: "Cocktail Bar", themeId: "bar",
+    design: { page: { bgGradient: "ink" } },
+    sections: [
+      { name: "Signature Cocktails", icon: "🍸", columns: 1, header: { align: "center" }, items: [
+        t("Smoked Old Fashioned", "Bourbon, bitters, applewood smoke", 1400, { featured: true }),
+        t("Elderflower Spritz", "Prosecco, elderflower, soda", 1200, {}),
+      ] },
+      { name: "Wine & Beer", icon: "🍷", columns: 2, items: [
+        t("House Red (Glass)", "Malbec, Mendoza", 900, {}),
+        t("Craft IPA", "Local, hoppy, 6.2%", 700, {}),
+      ] },
+      { name: "Bar Bites", icon: "🥨", columns: 2, items: [
+        t("Truffle Fries", "Parmesan, herbs, truffle oil", 850, { tags: ["veg", "bestseller"] }),
+        t("Sliders (3)", "Wagyu beef, pickles, brioche", 1300, {}),
+      ] },
+    ],
+  },
+  // ── Event ──
+  {
+    id: "wedding-menu", name: "Wedding Menu", category: "event",
+    description: "Soft, romantic single-column menu with centred script headers.",
+    previewName: "Aisha & Omar", cuisine: "Wedding Reception", themeId: "blush",
+    design: { page: { bgGradient: "cream" }, type: { title: { font: "script", size: 32, bold: false, italic: false } } },
+    sections: [
+      { name: "Welcome", columns: 1, header: { align: "center", uppercase: false, divider: false }, items: [
+        t("Rose & Cardamom Sharbat", "Chilled welcome drink", 0, {}),
+      ] },
+      { name: "Starters", columns: 1, header: { align: "center", uppercase: false, divider: true }, items: [
+        t("Saffron Chicken Tikka", "Char-grilled, mint chutney", 0, { featured: true }),
+        t("Paneer Shashlik", "Peppers, onion, smoked", 0, { tags: ["veg"] }),
+      ] },
+      { name: "Main Course", columns: 1, header: { align: "center", uppercase: false, divider: true }, items: [
+        t("Mutton Biryani", "Aged basmati, fried onion, raita", 0, { tags: ["bestseller"] }),
+        t("Butter Chicken", "Tomato, cream, fenugreek", 0, {}),
+      ] },
+      { name: "Dessert Table", columns: 1, header: { align: "center", uppercase: false, divider: true }, items: [
+        t("Gulab Jamun", "Warm, rose syrup", 0, {}),
+        t("Kulfi Falooda", "Saffron kulfi, vermicelli", 0, {}),
+      ] },
+    ],
+  },
+  {
+    id: "seasonal-specials", name: "Seasonal Specials", category: "event",
+    description: "Warm harvest palette for a limited seasonal menu.",
+    previewName: "Autumn Table", cuisine: "Seasonal Specials", themeId: "harvest",
+    sections: [
+      { name: "This Season's Picks", icon: "🍂", columns: 2, header: { align: "center" }, items: [
+        t("Roast Pumpkin Soup", "Sage brown butter, toasted seeds", 700, { tags: ["veg"], featured: true }),
+        t("Apple & Walnut Salad", "Maple vinaigrette, blue cheese", 850, { tags: ["veg"] }),
+      ] },
+      { name: "Warm Mains", icon: "🍲", columns: 2, items: [
+        t("Braised Short Rib", "Root vegetables, red wine reduction", 2600, { tags: ["chefspecial"] }),
+        t("Butternut Gnocchi", "Brown butter, crispy sage", 1700, { tags: ["veg"] }),
+      ] },
+      { name: "Seasonal Desserts", icon: "🥧", columns: 2, items: [
+        t("Spiced Apple Pie", "Cinnamon crumble, clotted cream", 650, { tags: ["bestseller"] }),
+      ] },
+    ],
+  },
 ];
 
 // Font families for the typography designer. `css: null` means "inherit the

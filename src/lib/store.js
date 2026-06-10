@@ -195,6 +195,35 @@ export function addMenu(restaurantId, name = "New Menu") {
   return menu;
 }
 
+// Build a fresh, persistable menu from a Template Gallery entry — assigning ids
+// to its authored sections/items and merging its design over the defaults. Used
+// both to seed a new menu on selection and to render the gallery thumbnails.
+export function buildMenuFromTemplate(template, name) {
+  return {
+    id: uid("menu"),
+    name: name ?? template.name ?? "New Menu",
+    themeId: template.themeId ?? DEFAULT_THEME,
+    design: normalizeDesign(template.design),
+    sections: (template.sections ?? []).map(s => ({
+      ...blankSection(s.name ?? "Section"),
+      subhead: s.subhead ?? "",
+      icon: s.icon ?? "",
+      columns: Math.min(6, Math.max(1, s.columns ?? 1)),
+      bg: s.bg ?? null,
+      header: { ...defaultHeader(), ...(s.header ?? {}) },
+      items: (s.items ?? []).map(it => ({ ...blankItem(), ...it })),
+    })),
+    views: 0,
+    updatedAt: Date.now(),
+  };
+}
+
+export function addMenuFromTemplate(restaurantId, template, name) {
+  const menu = buildMenuFromTemplate(template, name);
+  saveMenu(restaurantId, menu);
+  return menu;
+}
+
 export function deleteMenu(restaurantId, menuId) {
   const list = readAll();
   const r = list.find(x => x.id === restaurantId);

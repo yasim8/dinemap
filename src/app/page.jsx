@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useAuthed, setAuthed } from "@/lib/auth";
 import {
   useOwnerData, seedIfEmpty, getRestaurant, upsertRestaurant, saveMenu,
-  createRestaurant, addMenu, deleteMenu, duplicateMenu,
+  createRestaurant, addMenu, addMenuFromTemplate, buildMenuFromTemplate, deleteMenu, duplicateMenu,
   replyToReview, replyToItemReview, blankSection, normalizeSection, defaultHeader,
   defaultDesign, normalizeDesign,
 } from "@/lib/store";
-import { CATEGORIES, BANKS, RESTAURANTS, MENU, REVIEWS, RATING_DISTRIBUTION, COUNTRIES, ITEM_TAGS, MENU_THEMES, CARD_TYPES, FONT_FAMILIES, GRADIENT_PRESETS, fontCss, gradientCss, locationForArea, nearestArea } from "@/lib/data";
+import { CATEGORIES, BANKS, RESTAURANTS, MENU, REVIEWS, RATING_DISTRIBUTION, COUNTRIES, ITEM_TAGS, MENU_THEMES, MENU_TEMPLATES, TEMPLATE_CATEGORIES, CARD_TYPES, FONT_FAMILIES, GRADIENT_PRESETS, fontCss, gradientCss, locationForArea, nearestArea } from "@/lib/data";
 import { RestaurantCard } from "@/components/restaurant/RestaurantCard";
 import {
   Logo, Rating, PriceRange, Tag, Badge, Avatar, IconBtn, Btn, Pill,
@@ -953,12 +953,74 @@ function PublicMenuScreen({ restaurant, menu, onExit }) {
   );
 }
 
+// ─── Template Gallery ─────────────────────────────────────────────────────────
+// The gateway shown when creating a new menu: pick a professionally designed
+// starting point (or a blank menu) before entering the builder. Each card is a
+// live render of the actual template — true WYSIWYG, no static preview images.
+function TemplateGalleryScreen({ onPick, onBlank, onBack }) {
+  const [cat, setCat] = useState("all");
+  const sampleCover = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80";
+  const tabs = [{ id: "all", label: "All" }, ...TEMPLATE_CATEGORIES];
+  const list = MENU_TEMPLATES.filter(tpl => cat === "all" || tpl.category === cat);
+  const catLabel = id => TEMPLATE_CATEGORIES.find(c => c.id === id)?.label ?? id;
+
+  return (
+    <div className="page-enter" style={{ background: "var(--surface-page)", minHeight: "100vh" }}>
+      <section style={{ background: "var(--grad-navy)", padding: "28px 32px 24px" }}>
+        <div className="dm-wrap" style={{ maxWidth: 1280, margin: "0 auto" }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-on-dark)", opacity: 0.85, display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, padding: 0 }}><ChevronLeft size={16} /> Back to dashboard</button>
+          <h1 className="dm-h1" style={{ color: "var(--white)", margin: "14px 0 6px" }}>Choose a template</h1>
+          <p className="dm-body-lg" style={{ color: "var(--text-on-dark)", opacity: 0.7, margin: 0, maxWidth: 560 }}>Start from a professionally designed menu — you&apos;ll customise the layout, style and content in the next steps.</p>
+          <div className="dm-tabs dm-dash-tabs dm-no-scrollbar" style={{ marginTop: 22, borderBottom: "none", overflowX: "auto" }}>
+            {tabs.map(c => (
+              <button key={c.id} onClick={() => setCat(c.id)} className={["dm-tab", cat === c.id ? "dm-tab--active" : ""].join(" ")} style={{ whiteSpace: "nowrap" }}>{c.label}</button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="dm-wrap" style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 32px 96px" }}>
+        <div className="dm-grid-3">
+          {/* Start from blank */}
+          <button onClick={onBlank} style={{ minHeight: 420, border: "2px dashed var(--border)", borderRadius: "var(--radius-xl)", background: "var(--white)", cursor: "pointer", color: "var(--text-secondary)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--surface-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={28} color="var(--brand)" /></div>
+            Start from blank
+            <span className="dm-small" style={{ fontWeight: 400, maxWidth: 220, textAlign: "center" }}>An empty menu with a single section — build it your way.</span>
+          </button>
+
+          {list.map(tpl => {
+            const previewMenu = buildMenuFromTemplate(tpl);
+            const previewRest = { name: tpl.previewName, cuisine: tpl.cuisine, coverImage: sampleCover, menus: [], reviews: [] };
+            return (
+              <div key={tpl.id} className="dm-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <div onClick={() => onPick(tpl)} style={{ cursor: "pointer", position: "relative", height: 300, overflow: "hidden", borderBottom: "1px solid var(--divider)" }}>
+                  <div style={{ pointerEvents: "none" }}>
+                    <MenuPreview restaurant={previewRest} menu={previewMenu} />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 70%, var(--white) 100%)" }} />
+                  <span className="dm-badge dm-badge--teal" style={{ position: "absolute", top: 12, left: 12 }}>{catLabel(tpl.category)}</span>
+                </div>
+                <div style={{ padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+                  <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16 }}>{tpl.name}</div>
+                  <p className="dm-small" style={{ margin: 0, flex: 1 }}>{tpl.description}</p>
+                  <Btn full icon={<LayoutGrid size={15} />} onClick={() => onPick(tpl)}>Use this template</Btn>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Menu Builder Screen ──────────────────────────────────────────────────────
 const BUILDER_STEPS = [
+  ["layout", "Layout"],
+  ["design", "Design"],
+  ["items", "Items"],
   ["restaurant", "Restaurant"],
   ["discount", "Bank Discount"],
-  ["menu", "Menu Items"],
-  ["design", "Design"],
 ];
 
 // Text roles exposed in the typography designer (label + design.type key).
@@ -977,7 +1039,7 @@ const newId = (p) => `${p}_${Date.now().toString(36)}_${_bid++}`;
 // writes the restaurant metadata/discount and the menu (name, theme, sections,
 // items) back to localStorage, then exits to the dashboard.
 function MenuBuilderScreen({ target, onExit, onBack }) {
-  const [step, setStep] = useState("restaurant");
+  const [step, setStep] = useState("layout");
   const [showPreview, setShowPreview] = useState(false);
   const [previewDevice, setPreviewDevice] = useState("desktop"); // desktop | mobile
 
@@ -1114,6 +1176,41 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
     onExit();
   };
 
+  // Section rail — shared by the Layout step (structuring) and the Items step
+  // (navigating which section to fill). Called as a plain function (not a nested
+  // <Component/>) so the rename inputs keep focus across re-renders.
+  const renderSectionRail = () => (
+    <aside className="dm-builder-aside" style={{ width: 280, flexShrink: 0, background: "var(--white)", borderRight: "1px solid var(--divider)", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "16px 20px 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div className="dm-fallback" style={{ width: 40, height: 40, borderRadius: "var(--radius-md)", fontSize: 18, flexShrink: 0 }}>{(meta.name || "R")[0]}</div>
+          <div><div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15 }}>{meta.name || "Your Restaurant"}</div><div className="dm-small">{meta.menuName} · {totalItems} items</div></div>
+        </div>
+        <span className="dm-label">Menu Sections</span>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
+        {sections.map((c, si) => {
+          const on = active === c.id;
+          return (
+            <div key={c.id} onClick={() => setActive(c.id)}
+              draggable onDragStart={() => setDragSec(si)} onDragOver={e => e.preventDefault()} onDrop={() => moveSection(si)} onDragEnd={() => setDragSec(null)}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", marginBottom: 4, cursor: "pointer", borderRadius: "var(--radius-md)", borderLeft: on ? "3px solid var(--brand)" : "3px solid transparent", background: on ? "var(--surface-tint)" : "transparent", opacity: dragSec === si ? 0.4 : 1 }}>
+              <GripVertical size={15} color="var(--gray-200)" style={{ cursor: "grab" }} />
+              <input value={c.name} onClick={e => e.stopPropagation()} onChange={e => renameSection(c.id, e.target.value)} style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)", outline: "none" }} />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", background: "var(--surface-muted)", borderRadius: 999, padding: "2px 8px" }}>{counts[c.id]}</span>
+              {sections.length > 1 && <button onClick={e => { e.stopPropagation(); removeSection(c.id); }} className="dm-iconbtn" style={{ width: 26, height: 26 }} title="Delete section"><Trash2 size={13} color="var(--red-500)" /></button>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ padding: 16 }}>
+        <button onClick={addSection} style={{ width: "100%", padding: 12, borderRadius: "var(--radius-md)", border: "2px dashed var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-secondary)", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <Plus size={16} /> Add Section
+        </button>
+      </div>
+    </aside>
+  );
+
   return (
     <div className="dm-builder" style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--surface-page)", position: "fixed", inset: 0, zIndex: 100, overflow: "hidden" }}>
       {/* Top bar */}
@@ -1186,7 +1283,8 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
                 </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, flexWrap: "wrap", gap: 12 }}>
+                <Btn variant="ghost" onClick={() => setStep("items")}>Back to items</Btn>
                 <Btn onClick={() => setStep("discount")} iconRight={<ArrowRight size={17} />}>Next: Bank Discount</Btn>
               </div>
             </div>
@@ -1245,51 +1343,27 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
             )}
             <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 28, flexWrap: "wrap", gap: 12 }}>
               <Btn variant="ghost" onClick={() => setStep("restaurant")}>Back</Btn>
-              <Btn onClick={() => setStep("menu")} iconRight={<ArrowRight size={17} />}>Next: Menu Items</Btn>
+              <Btn icon={<Check size={17} />} onClick={publish}>Publish menu</Btn>
             </div>
           </div>
         )}
 
-        {/* ── Menu step ── */}
-        {step === "menu" && (
+        {/* ── Layout step — structure first: template, sections, columns, headers ── */}
+        {step === "layout" && (
           <div className="dm-builder" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-            {/* Sections */}
-            <aside className="dm-builder-aside" style={{ width: 280, flexShrink: 0, background: "var(--white)", borderRight: "1px solid var(--divider)", display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "16px 20px 8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <div className="dm-fallback" style={{ width: 40, height: 40, borderRadius: "var(--radius-md)", fontSize: 18, flexShrink: 0 }}>{(meta.name || "R")[0]}</div>
-                  <div><div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15 }}>{meta.name || "Your Restaurant"}</div><div className="dm-small">{meta.menuName} · {totalItems} items</div></div>
-                </div>
-                <span className="dm-label">Menu Sections</span>
-              </div>
-              <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
-                {sections.map((c, si) => {
-                  const on = active === c.id;
-                  return (
-                    <div key={c.id} onClick={() => setActive(c.id)}
-                      draggable onDragStart={() => setDragSec(si)} onDragOver={e => e.preventDefault()} onDrop={() => moveSection(si)} onDragEnd={() => setDragSec(null)}
-                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", marginBottom: 4, cursor: "pointer", borderRadius: "var(--radius-md)", borderLeft: on ? "3px solid var(--brand)" : "3px solid transparent", background: on ? "var(--surface-tint)" : "transparent", opacity: dragSec === si ? 0.4 : 1 }}>
-                      <GripVertical size={15} color="var(--gray-200)" style={{ cursor: "grab" }} />
-                      <input value={c.name} onClick={e => e.stopPropagation()} onChange={e => renameSection(c.id, e.target.value)} style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)", outline: "none" }} />
-                      <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", background: "var(--surface-muted)", borderRadius: 999, padding: "2px 8px" }}>{counts[c.id]}</span>
-                      {sections.length > 1 && <button onClick={e => { e.stopPropagation(); removeSection(c.id); }} className="dm-iconbtn" style={{ width: 26, height: 26 }} title="Delete section"><Trash2 size={13} color="var(--red-500)" /></button>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ padding: 16 }}>
-                <button onClick={addSection} style={{ width: "100%", padding: 12, borderRadius: "var(--radius-md)", border: "2px dashed var(--border)", background: "transparent", cursor: "pointer", color: "var(--text-secondary)", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <Plus size={16} /> Add Section
-                </button>
-              </div>
-            </aside>
+            {renderSectionRail()}
 
-            {/* Items */}
             <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
               <header style={{ background: "var(--white)", borderBottom: "1px solid var(--divider)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <h2 className="dm-h3" style={{ margin: 0 }}>{activeSection?.name}</h2>
-                <Btn onClick={() => { setEditing(null); setShowModal(true); }} icon={<Plus size={17} />}>Add Item</Btn>
+                <div>
+                  <h2 className="dm-h3" style={{ margin: 0 }}>Page layout</h2>
+                  <p className="dm-small" style={{ margin: "2px 0 0" }}>Pick a template, add sections, and set columns &amp; headers. Add the actual dishes in the Items step.</p>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Btn onClick={() => setStep("design")} iconRight={<ArrowRight size={17} />}>Next: Design</Btn>
+                </div>
               </header>
+
               {/* Per-section layout + header design */}
               {activeSection && (
                 <div style={{ background: "var(--white)", borderBottom: "1px solid var(--divider)", padding: "12px 24px", display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
@@ -1330,6 +1404,50 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
                   </div>
                 </div>
               )}
+
+              <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+                {/* Template picker */}
+                <span className="dm-field__label" style={{ display: "block", marginBottom: 10 }}>Template</span>
+                <div className="dm-grid-4" style={{ marginBottom: 8 }}>
+                  {MENU_THEMES.map(t => {
+                    const on = meta.themeId === t.id;
+                    return (
+                      <button key={t.id} onClick={() => setMetaField("themeId", t.id)} style={{ textAlign: "left", cursor: "pointer", padding: 14, borderRadius: "var(--radius-lg)", background: "var(--white)", border: on ? "2px solid var(--brand)" : "2px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div className="dm-swatch"><span style={{ background: t.colors.bg }} /><span style={{ background: t.colors.accent }} /><span style={{ background: t.colors.text }} /></div>
+                        <div>
+                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)" }}>{t.name}</div>
+                          <div className="dm-small">{t.font}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Live structural preview — shows sections, columns & headers before any items */}
+                <h3 className="dm-h3" style={{ margin: "24px 0 12px" }}>Structure preview</h3>
+                <MenuPreview restaurant={liveRestaurant} menu={liveMenu} />
+              </div>
+            </main>
+          </div>
+        )}
+
+        {/* ── Items step — fill in the dishes once the layout is set ── */}
+        {step === "items" && (
+          <div className="dm-builder" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {renderSectionRail()}
+
+            {/* Items */}
+            <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <header style={{ background: "var(--white)", borderBottom: "1px solid var(--divider)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <Btn variant="ghost" size="sm" onClick={() => setStep("design")}><ChevronLeft size={16} /> Design</Btn>
+                  <h2 className="dm-h3" style={{ margin: 0 }}>{activeSection?.name}</h2>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Btn variant="secondary" onClick={() => { setEditing(null); setShowModal(true); }} icon={<Plus size={17} />}>Add Item</Btn>
+                  <Btn onClick={() => setStep("restaurant")} iconRight={<ArrowRight size={17} />}>Next: Restaurant</Btn>
+                </div>
+              </header>
               <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
                 <div className="dm-grid-3">
                   {activeSection?.items.map((it, ii) => (
@@ -1379,28 +1497,9 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                 <div>
                   <h2 className="dm-h2" style={{ marginBottom: 6 }}>Design your menu</h2>
-                  <p className="dm-small" style={{ marginBottom: 0 }}>Pick a template to start, then customise anything. Templates are just starting points — your edits are kept, and anything you don&apos;t touch follows the template.</p>
+                  <p className="dm-small" style={{ marginBottom: 0 }}>Fine-tune typography, colours and spacing on top of your <strong>{themeOf(meta.themeId).name}</strong> template (change the template back in Layout). Anything you don&apos;t touch follows the template.</p>
                 </div>
                 <Btn variant="ghost" size="sm" onClick={resetDesign}>Reset design</Btn>
-              </div>
-
-              {/* Template picker */}
-              <div style={{ marginTop: 24 }}>
-                <span className="dm-field__label" style={{ display: "block", marginBottom: 10 }}>Template</span>
-                <div className="dm-grid-4">
-                  {MENU_THEMES.map(t => {
-                    const on = meta.themeId === t.id;
-                    return (
-                      <button key={t.id} onClick={() => setMetaField("themeId", t.id)} style={{ textAlign: "left", cursor: "pointer", padding: 14, borderRadius: "var(--radius-lg)", background: "var(--white)", border: on ? "2px solid var(--brand)" : "2px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
-                        <div className="dm-swatch"><span style={{ background: t.colors.bg }} /><span style={{ background: t.colors.accent }} /><span style={{ background: t.colors.text }} /></div>
-                        <div>
-                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: on ? "var(--brand)" : "var(--text-primary)" }}>{t.name}</div>
-                          <div className="dm-small">{t.font}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
 
               {/* Typography */}
@@ -1463,8 +1562,8 @@ function MenuBuilderScreen({ target, onExit, onBack }) {
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 28, flexWrap: "wrap", gap: 12 }}>
-                <Btn variant="ghost" onClick={() => setStep("menu")}>Back to items</Btn>
-                <Btn icon={<Check size={17} />} onClick={publish}>Publish</Btn>
+                <Btn variant="ghost" onClick={() => setStep("layout")}>Back to layout</Btn>
+                <Btn onClick={() => setStep("items")} iconRight={<ArrowRight size={17} />}>Next: Items</Btn>
               </div>
             </div>
 
@@ -1841,6 +1940,7 @@ export default function App() {
   const [showLocation, setShowLocation] = useState(false);
   const [location, setLocation] = useState({ countryId: "pk", cityId: "lahore", area: null });
   const [builderTarget, setBuilderTarget] = useState(null);
+  const [galleryTarget, setGalleryTarget] = useState(null); // restaurantId we're creating a menu for
   const [shared, setShared] = useState(null); // decoded public menu from a #menu= share link
   const router = useRouter();
   const authed = useAuthed();
@@ -1894,7 +1994,12 @@ export default function App() {
   const goDashboard = () => { if (!authed) { goLogin("/?screen=dashboard"); return; } nav("dashboard"); };
   const editMenu = (restaurantId, menuId) => { setBuilderTarget({ restaurantId, menuId }); nav("menu-builder"); };
   const createNewRestaurant = () => { const r = createRestaurant(); editMenu(r.id, r.menus[0].id); };
-  const addMenuTo = (restaurantId) => { const m = addMenu(restaurantId); editMenu(restaurantId, m.id); };
+  // Creating a menu now goes through the Template Gallery first (never a blank
+  // form by default); picking a template — or "Start from blank" — seeds the
+  // menu and opens the builder.
+  const addMenuTo = (restaurantId) => { setGalleryTarget(restaurantId); nav("template-gallery"); };
+  const pickTemplate = (tpl) => { if (!galleryTarget) return; const m = addMenuFromTemplate(galleryTarget, tpl); editMenu(galleryTarget, m.id); };
+  const createBlankMenu = () => { if (!galleryTarget) return; const m = addMenu(galleryTarget); editMenu(galleryTarget, m.id); };
   const toggleFav = (id) => {
     if (!authed) { goLogin(); return; }
     setFavourites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1940,6 +2045,9 @@ export default function App() {
       )}
       {screen === "dashboard" && (
         <DashboardScreen data={ownerData} onEditMenu={editMenu} onAddMenu={addMenuTo} onCreateRestaurant={createNewRestaurant} />
+      )}
+      {screen === "template-gallery" && (
+        <TemplateGalleryScreen onPick={pickTemplate} onBlank={createBlankMenu} onBack={() => nav("dashboard")} />
       )}
       {screen === "menu-builder" && builderTarget && (
         <MenuBuilderScreen target={builderTarget} onExit={() => nav("dashboard")} onBack={() => nav("dashboard")} />

@@ -125,7 +125,9 @@ is empty). Used in the restaurant **Info tab** and the **Location Picker** previ
 A full-screen authoring tool with a segmented step control:
 
 1. **Restaurant** — name, **Country → City → Area** cascade, cuisines, phone,
-   description, cover image (file upload → data URL).
+   description, cover image. **Replace cover** opens a hidden `<input type="file">`,
+   reads the picked image via `FileReader` → data URL into `meta.coverImage`, and
+   persists on save — so it works when both **creating and editing** a restaurant.
 2. **Bank Discount** — enable toggle, bank, card type, percent, min spend,
    valid days, expiry — with a **live discount-badge preview**.
 3. **Menu Items** — section sidebar with **drag-and-drop reordering** + item
